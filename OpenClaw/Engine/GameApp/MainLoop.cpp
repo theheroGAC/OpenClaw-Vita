@@ -2,7 +2,7 @@
 #include "MainLoop.h"
 #include <fstream>
 
-#if !(defined(__ANDROID__) || defined(__WINDOWS__))
+#if !(defined(__ANDROID__) || defined(__WINDOWS__) || defined(VITA))
 #include <pwd.h>
 #include <unistd.h>
 #endif
@@ -22,6 +22,8 @@ int RunGameEngine(int argc, char** argv)
 
 #if defined(__ANDROID__)
     userDirectory = "/sdcard/claw/";
+#elif defined(VITA)
+    userDirectory = "ux0:data/openclaw/";
 #elif defined(__WINDOWS__)
     userDirectory = "";
 #else

@@ -63,6 +63,40 @@ bool BaseGameApp::Initialize(int argc, char** argv)
     if (!InitializeDisplay(m_GameOptions)) return false;
     if (!InitializeAudio(m_GameOptions)) return false;
     if (!InitializeFont(m_GameOptions)) return false;
+
+#ifdef VITA
+    if (m_pRenderer && m_pConsoleFont)
+    {
+        SDL_SetRenderDrawColor(m_pRenderer, 0, 0, 0, 255);
+        SDL_RenderClear(m_pRenderer);
+
+        SDL_Color white = { 255, 255, 255, 255 };
+        SDL_Surface* surface = TTF_RenderUTF8_Blended(m_pConsoleFont, "Loading assets, please wait...", white);
+        if (surface)
+        {
+            SDL_Texture* texture = SDL_CreateTextureFromSurface(m_pRenderer, surface);
+            if (texture)
+            {
+                int w = 0;
+                int h = 0;
+                SDL_RenderGetLogicalSize(m_pRenderer, &w, &h);
+                if (w == 0 || h == 0)
+                {
+                    SDL_GetRendererOutputSize(m_pRenderer, &w, &h);
+                }
+                int texW = 0;
+                int texH = 0;
+                SDL_QueryTexture(texture, NULL, NULL, &texW, &texH);
+                SDL_Rect dstRect = { (w - texW) / 2, (h - texH) / 2, texW, texH };
+                SDL_RenderCopy(m_pRenderer, texture, NULL, &dstRect);
+                SDL_DestroyTexture(texture);
+            }
+            SDL_FreeSurface(surface);
+        }
+        SDL_RenderPresent(m_pRenderer);
+    }
+#endif
+
     if (!InitializeResources(m_GameOptions)) return false;
     if (!InitializeLocalization(m_GameOptions)) return false;
     if (!InitializeTouchManager(m_GameOptions)) return false;
@@ -78,7 +112,9 @@ bool BaseGameApp::Initialize(int argc, char** argv)
         return false;
     }
 
+#ifndef VITA
     m_pResourceMgr->VPreload("/CLAW/*", NULL, ORIGINAL_RESOURCE);
+#endif
     m_pResourceMgr->VPreload("/GAME/*", NULL, ORIGINAL_RESOURCE);
     m_pResourceMgr->VPreload("/STATES/*", NULL, ORIGINAL_RESOURCE);
 
@@ -282,10 +318,216 @@ int32 BaseGameApp::Run()
     return 0;
 }
 
+#ifdef VITA
+static SDL_Keycode MapVitaButtonToKey(uint8_t button)
+{
+    switch (button)
+    {
+        case 0: return SDLK_SPACE;   // Cross -> Jump
+        case 1: return SDLK_LCTRL;   // Circle -> Attack
+        case 2: return SDLK_LALT;    // Square -> Fire
+        case 3: return SDLK_LSHIFT;  // Triangle -> Change Ammo
+        case 4: return SDLK_LSHIFT;  // L1 -> Change Ammo
+        case 5: return SDLK_LCTRL;   // R1 -> Attack
+        case 6: return SDLK_DOWN;    // D-Pad Down
+        case 7: return SDLK_LEFT;    // D-Pad Left
+        case 8: return SDLK_UP;      // D-Pad Up
+        case 9: return SDLK_RIGHT;   // D-Pad Right
+        case 10: return SDLK_ESCAPE; // Select -> Menu/Pause
+        case 11: return SDLK_RETURN; // Start -> Enter/Confirm
+        default: return SDLK_UNKNOWN;
+    }
+}
+#endif
+
 void BaseGameApp::OnEvent(SDL_Event& event)
 {
     switch (event.type)
     {
+#ifdef VITA
+        case SDL_JOYBUTTONDOWN:
+        {
+            SDL_Keycode key = MapVitaButtonToKey(event.jbutton.button);
+            if (key != SDLK_UNKNOWN)
+            {
+                SDL_Event fakeEvent;
+                fakeEvent.type = SDL_KEYDOWN;
+                fakeEvent.key.state = SDL_PRESSED;
+                fakeEvent.key.keysym.sym = key;
+                fakeEvent.key.keysym.scancode = SDL_GetScancodeFromKey(key);
+                OnEvent(fakeEvent);
+            }
+            break;
+        }
+        case SDL_JOYBUTTONUP:
+        {
+            SDL_Keycode key = MapVitaButtonToKey(event.jbutton.button);
+            if (key != SDLK_UNKNOWN)
+            {
+                SDL_Event fakeEvent;
+                fakeEvent.type = SDL_KEYUP;
+                fakeEvent.key.state = SDL_RELEASED;
+                fakeEvent.key.keysym.sym = key;
+                fakeEvent.key.keysym.scancode = SDL_GetScancodeFromKey(key);
+                OnEvent(fakeEvent);
+            }
+            break;
+        }
+        case SDL_JOYAXISMOTION:
+        {
+            const int DEADZONE = 16000;
+            static bool leftPressed = false;
+            static bool rightPressed = false;
+            static bool upPressed = false;
+            static bool downPressed = false;
+
+            if (event.jaxis.axis == 0) // Left analog X-axis
+            {
+                if (event.jaxis.value < -DEADZONE)
+                {
+                    if (!leftPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYDOWN;
+                        fakeEvent.key.state = SDL_PRESSED;
+                        fakeEvent.key.keysym.sym = SDLK_LEFT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_LEFT;
+                        OnEvent(fakeEvent);
+                        leftPressed = true;
+                    }
+                    if (rightPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_RIGHT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_RIGHT;
+                        OnEvent(fakeEvent);
+                        rightPressed = false;
+                    }
+                }
+                else if (event.jaxis.value > DEADZONE)
+                {
+                    if (!rightPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYDOWN;
+                        fakeEvent.key.state = SDL_PRESSED;
+                        fakeEvent.key.keysym.sym = SDLK_RIGHT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_RIGHT;
+                        OnEvent(fakeEvent);
+                        rightPressed = true;
+                    }
+                    if (leftPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_LEFT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_LEFT;
+                        OnEvent(fakeEvent);
+                        leftPressed = false;
+                    }
+                }
+                else
+                {
+                    if (leftPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_LEFT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_LEFT;
+                        OnEvent(fakeEvent);
+                        leftPressed = false;
+                    }
+                    if (rightPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_RIGHT;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_RIGHT;
+                        OnEvent(fakeEvent);
+                        rightPressed = false;
+                    }
+                }
+            }
+            else if (event.jaxis.axis == 1) // Left analog Y-axis
+            {
+                if (event.jaxis.value < -DEADZONE)
+                {
+                    if (!upPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYDOWN;
+                        fakeEvent.key.state = SDL_PRESSED;
+                        fakeEvent.key.keysym.sym = SDLK_UP;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_UP;
+                        OnEvent(fakeEvent);
+                        upPressed = true;
+                    }
+                    if (downPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_DOWN;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_DOWN;
+                        OnEvent(fakeEvent);
+                        downPressed = false;
+                    }
+                }
+                else if (event.jaxis.value > DEADZONE)
+                {
+                    if (!downPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYDOWN;
+                        fakeEvent.key.state = SDL_PRESSED;
+                        fakeEvent.key.keysym.sym = SDLK_DOWN;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_DOWN;
+                        OnEvent(fakeEvent);
+                        downPressed = true;
+                    }
+                    if (upPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_UP;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_UP;
+                        OnEvent(fakeEvent);
+                        upPressed = false;
+                    }
+                }
+                else
+                {
+                    if (upPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_UP;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_UP;
+                        OnEvent(fakeEvent);
+                        upPressed = false;
+                    }
+                    if (downPressed)
+                    {
+                        SDL_Event fakeEvent;
+                        fakeEvent.type = SDL_KEYUP;
+                        fakeEvent.key.state = SDL_RELEASED;
+                        fakeEvent.key.keysym.sym = SDLK_DOWN;
+                        fakeEvent.key.keysym.scancode = SDL_SCANCODE_DOWN;
+                        OnEvent(fakeEvent);
+                        downPressed = false;
+                    }
+                }
+            }
+            break;
+        }
+#endif
         case SDL_QUIT:
         case SDL_APP_TERMINATING:
         {
@@ -567,6 +809,12 @@ bool BaseGameApp::LoadGameOptions(const char* inConfigFile)
             assetsElem->FirstChildElement("SavesFile")));
     }
 
+#ifdef VITA
+    m_GameOptions.assetsFolder = "ux0:data/openclaw/";
+    m_GameOptions.tempDir = "ux0:data/openclaw/";
+    m_GameOptions.savesFile = "SAVES.XML";
+#endif
+
     //-------------------------------------------------------------------------
     // Font
     //-------------------------------------------------------------------------
@@ -774,11 +1022,28 @@ bool BaseGameApp::InitializeDisplay(GameOptions& gameOptions)
 {
     LOG(">>>>> Initializing display...");
 
+#ifdef VITA
+    SDL_SetHint("SDL_VITA_PVR_OPENGL", "1");
+    gameOptions.windowWidth = 960;
+    gameOptions.windowHeight = 544;
+    gameOptions.scale = 1.5;
+#endif
+
     if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO) != 0)
     {
         LOG_ERROR("Failed to initialize SDL2 library. Error: %s" + std::string(SDL_GetError()));
         return false;
     }
+
+#ifdef VITA
+    if (SDL_InitSubSystem(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) == 0)
+    {
+        if (SDL_NumJoysticks() > 0)
+        {
+            SDL_JoystickOpen(0);
+        }
+    }
+#endif
 
     m_pWindow = SDL_CreateWindow(VGetGameTitle(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
         gameOptions.windowWidth, gameOptions.windowHeight, SDL_WINDOW_SHOWN);
