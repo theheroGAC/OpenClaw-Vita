@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.2)
 option(Android "Android" OFF)
 
 option(Emscripten "Build as WASM" OFF)
+option(VITA "Build for PS Vita" OFF)
 option(Extern_Config "Do not embed config file" ON)
 set(EMSCRIPTEN_PATH "CHANGE ME PLEASE!!!/emsdk")
 
@@ -33,10 +34,17 @@ endif (WIN32)
 #endif(Android)
 
 # Directories with headers
-include_directories(./Box2D/)
-include_directories(./libwap/)
-include_directories(./ThirdParty/)
-include_directories(./ThirdParty/Tinyxml/)
+if (VITA)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -idirafter ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty")
+    include_directories(./Box2D/)
+    include_directories(./libwap/)
+    include_directories(./ThirdParty/Tinyxml/)
+else()
+    include_directories(./Box2D/)
+    include_directories(./libwap/)
+    include_directories(./ThirdParty/)
+    include_directories(./ThirdParty/Tinyxml/)
+endif()
 if (Emscripten)
     include_directories("${EMSCRIPTEN_PATH}/upstream/emscripten/system/include/emscripten/")
 endif (Emscripten)
@@ -103,6 +111,76 @@ else (Emscripten)
                 android
                 )
     endif (Android)
+    if (VITA)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVITA -Wno-psabi")
+        set(TARGET_LIBS
+                libwap
+                tinyxml
+                Box2D
+                SDL2_mixer
+                SDL2_ttf
+                SDL2_image
+                SDL2_gfx
+                SDL2
+                vitaGL
+                vitashark
+                mathneon
+                vorbisfile
+                vorbis
+                ogg
+                opusfile
+                opus
+                modplug
+                xmp
+                mpg123
+                flac
+                freetype
+                harfbuzz
+                webpmux
+                webpdemux
+                webp
+                jpeg
+                png
+                bz2
+                z
+                m
+                pthread
+                SceAudioIn_stub
+                SceMotion_stub
+                SceHid_stub
+                SceGxm_stub
+                SceDisplay_stub
+                SceCtrl_stub
+                SceTouch_stub
+                SceAudio_stub
+                SceSysmodule_stub
+                SceAppMgr_stub
+                SceAppUtil_stub
+                SceNet_stub
+                SceNetCtl_stub
+                ScePower_stub
+                SceCommonDialog_stub
+                SceShaccCg_stub
+                SceShaccCgExt
+                taihen_stub
+                SceKernelDmacMgr_stub
+                )
+    endif (VITA)
 endif (Emscripten)
 
 target_link_libraries(openclaw ${TARGET_LIBS})
+
+if (VITA)
+    set_target_properties(openclaw PROPERTIES OUTPUT_NAME "openclaw_bin")
+    include("${VITASDK}/share/vita.cmake" REQUIRED)
+    vita_create_self(openclaw.self "../Build_Release/openclaw_bin")
+    add_dependencies(openclaw_bin-velf openclaw)
+    vita_create_vpk(openclaw.vpk "OPENCLAW1" openclaw.self
+        VERSION "01.00"
+        NAME "OpenClaw"
+        FILE sce_sys/icon0.png sce_sys/icon0.png
+        FILE sce_sys/livearea/contents/bg0.png sce_sys/livearea/contents/bg0.png
+        FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
+        FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
+    )
+endif (VITA)
