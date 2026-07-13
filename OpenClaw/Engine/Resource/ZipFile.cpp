@@ -139,9 +139,11 @@ bool ZipFile::Init(const std::string &resFileName)
     End();
 
     m_pFile = fopen(resFileName.c_str(), "rb");
-    //_wfopen_s(&m_pFile, resFileName.c_str(), "rb"));
     if (!m_pFile)
         return false;
+
+    m_pFileBuffer = new char[128 * 1024];
+    setvbuf(m_pFile, m_pFileBuffer, _IOFBF, 128 * 1024);
 
     // Assuming no extra comment at the end, read the whole end record.
     TZipDirHeader dh;
@@ -189,6 +191,14 @@ bool ZipFile::Init(const std::string &resFileName)
         else
         {
             pfh += sizeof(fh);
+
+            for (int charIdx = 0; charIdx < fh.fnameLen; ++charIdx)
+            {
+                if (pfh[charIdx] == '\\')
+                {
+                    pfh[charIdx] = '/';
+                }
+            }
 
             char fileName[_MAX_PATH];
             memcpy(fileName, pfh, fh.fnameLen);

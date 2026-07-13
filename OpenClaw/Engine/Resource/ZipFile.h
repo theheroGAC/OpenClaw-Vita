@@ -29,8 +29,8 @@ typedef std::map<std::string, FileList> DirToFileListMap;
 class ZipFile
 {
 public:
-    ZipFile() { m_nEntries = 0; m_pFile = NULL; m_pDirData = NULL; }
-    virtual ~ZipFile() { End(); fclose(m_pFile); }
+    ZipFile() { m_nEntries = 0; m_pFile = NULL; m_pDirData = NULL; m_pFileBuffer = NULL; }
+    virtual ~ZipFile() { End(); fclose(m_pFile); delete[] m_pFileBuffer; }
 
     bool Init(const std::string &resFileName);
     void End();
@@ -56,6 +56,7 @@ private:
 
     FILE *m_pFile;        // Zip file
     char *m_pDirData;    // Raw data buffer.
+    char *m_pFileBuffer;  // Custom file stream buffer
     int  m_nEntries;    // Number of entries.
 
     // Pointers to the dir entries in pDirData.
