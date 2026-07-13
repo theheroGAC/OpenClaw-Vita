@@ -22,6 +22,7 @@ struct RezArchiveFileEntry
 {
     RezArchive* rezArchive;
     std::ifstream* fileStream;
+    char* streamBuffer;
     std::mutex mutex;
 };
 
@@ -335,12 +336,13 @@ RezFile* WAP_GetRezFileFromRezDirectory(RezDirectory* rezDirectory, const char* 
     return GetChildFile(searchedFileDirectory, fullFileName);
 }
 
-static void RegisterRezArchiveFile(RezArchive* rezArchive, std::ifstream* rezArchiveFileStream)
+static void RegisterRezArchiveFile(RezArchive* rezArchive, std::ifstream* rezArchiveFileStream, char* streamBuffer)
 {
     // Create loaded REZ file entry
     RezArchiveFileEntry* rezArchiveFileEntry = new RezArchiveFileEntry;
     rezArchiveFileEntry->rezArchive = rezArchive;
     rezArchiveFileEntry->fileStream = rezArchiveFileStream;
+    rezArchiveFileEntry->streamBuffer = streamBuffer;
 
     g_rezArchiveFileEntryMap.insert(std::pair<RezArchive*, RezArchiveFileEntry*>(rezArchive, rezArchiveFileEntry));
 }
@@ -353,6 +355,7 @@ static void UnregisterRezArchiveFile(RezArchive* rezArchive)
         // Unregister loaded REZ file entry
         RezArchiveFileEntry* rezArchiveFileEntry = g_rezArchiveFileEntryMap[rezArchive];
         delete rezArchiveFileEntry->fileStream;
+        delete[] rezArchiveFileEntry->streamBuffer;
         delete rezArchiveFileEntry;
         rezArchiveFileEntry = NULL;
         g_rezArchiveFileEntryMap.erase(rezArchive);
@@ -601,9 +604,15 @@ static void ReadRezDirectory(RezArchive*& rezArchive, RezDirectory* rezDirectory
 
 RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
 {
-    std::ifstream* fileStream = new std::ifstream(rezFilePath, std::ifstream::binary);
+    std::ifstream* fileStream = new std::ifstream();
+    char* buffer = new char[256 * 1024];
+    fileStream->rdbuf()->pubsetbuf(buffer, 256 * 1024);
+    fileStream->open(rezFilePath, std::ifstream::binary);
+
     if (!fileStream->is_open())
     {
+        delete fileStream;
+        delete[] buffer;
         return NULL;
     }
 
@@ -631,6 +640,7 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
     if (expectedRezArchiveSize != actualLoadedFileSize)
     {
         WAP_DestroyRezArchive(rezArchive);
+        delete[] buffer;
         return NULL;
     }
 
@@ -638,7 +648,7 @@ RezArchive* WAP_LoadRezArchive(const char* rezFilePath)
     ReadRezDirectory(rezArchive, rezArchive->rootDirectory, fileStream);
 
     // Register loaded REZ archive file
-    RegisterRezArchiveFile(rezArchive, fileStream);
+    RegisterRezArchiveFile(rezArchive, fileStream, buffer);
 
     // Create map of REZ files with key being their full file path
     //START_QUERY_PERFORMANCE_TIMER;
